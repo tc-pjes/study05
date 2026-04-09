@@ -218,7 +218,7 @@ function initPanels() {
     const right = document.getElementById("panel-right");
     for(let i=1; i<=36; i++){
         let img = document.createElement("img");
-        img.src = `IMAGE/mom (${i}).png`;
+        img.src = `IMAGE/mom(${i}).png`;
         img.onerror = () => img.style.display='none';
         img.onclick = () => addManualSticker(img.src, 'img');
         left.appendChild(img);
