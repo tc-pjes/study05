@@ -206,7 +206,7 @@ function autoAddStickersToCorners(frameElement) {
 
     chosenCorners.forEach((pos, idx) => {
         let n = Math.floor(Math.random() * 36) + 1;
-        let s = createStickerElement(`IMAGE/mom (${n}).png`, 'img', scales[idx]);
+        let s = createStickerElement(`IMAGE/mom(${n}).png`, 'img', scales[idx]);
         s.classList.add("sticker-auto");
         Object.assign(s.style, pos);
         frameElement.appendChild(s);
