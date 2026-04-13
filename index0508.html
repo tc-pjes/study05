@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>豐洲國小 母親節 AI 拍貼機 - 貼圖優化版 💖</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<style>
+body{
+    margin:0;
+    font-family:"Microsoft JhengHei", sans-serif;
+    text-align:center;
+    background: radial-gradient(circle,#fffafa,#ffffff);
+    overflow-x: hidden;
+    touch-action: manipulation;
+}
+
+/* 左右貼圖庫 */
+.panel {
+    position: fixed;
+    top: 10px;
+    width: 100px;
+    height: 85vh;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 20px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    padding: 10px;
+    overflow-y: auto;
+    z-index: 1000; /* 高於畫布 */
+}
+#panel-left { left: 5px; }
+#panel-right { right: 5px; }
+
+@media (max-width: 768px) {
+    .panel { width: 60px; height: 70vh; }
+    .panel img, .emoji-item { width: 45px !important; font-size: 30px !important; }
+    #canvas { width: 95vw !important; }
+}
+
+.col-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #d81b60;
+    margin-bottom: 12px;
+    border-bottom: 2px solid #f8bbd0;
+    padding-bottom: 5px;
+}
+
+.panel img, .emoji-item {
+    width: 70px;
+    margin: 12px auto;
+    cursor: pointer;
+    transition: transform 0.2s;
+    display: block;
+}
+.emoji-item { font-size: 40px; text-align: center; line-height: 70px; }
+.panel img:hover, .emoji-item:hover { transform: scale(1.15); }
+
+/* 材質庫 */
+.bg-1 { background-image: linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%); background-size: 8px 8px; }
+.bg-2 { background-image: linear-gradient(45deg, #b4d2ff 25%, transparent 25%, transparent 50%, #b4d2ff 50%, #b4d2ff 75%, transparent 75%, transparent); background-size: 8px 8px; }
+.bg-3 { background-image: radial-gradient(#ff5050 20%, transparent 20%); background-size: 8px 8px; }
+.bg-4 { background-image: radial-gradient(#e6e6e6 20%, transparent 10%); background-size: 8px 8px; }
+.bg-5 { background-color: #333; background-image: linear-gradient(135deg, #000 25%, transparent 25%), linear-gradient(225deg, #000 25%, transparent 25%); background-size: 8px 8px; }
+.bg-6 { background-color: #fffaf0; background-image: linear-gradient(90deg, #d2b48c 50%, transparent 50%); background-size: 8px 8px; }
+.bg-7 { background-color: #64b4f0; background-image: linear-gradient(#fff 2px, transparent 2px); background-size: 8px 8px; }
+.bg-8 { background-image: linear-gradient(90deg, #96c8ff 50%, transparent 50%); background-size: 8px 8px; }
+.bg-9 { background-color: #fffdea; background-image: linear-gradient(45deg, #228b22 25%, transparent 25%); background-size: 8px 8px; }
+.bg-10 { background-image: linear-gradient(135deg, #a9a9a9 25%, transparent 25%); background-size: 8px 8px; }
+.bg-11 { background-image: linear-gradient(90deg, #b3e5fc 50%, transparent 50%), linear-gradient(#b3e5fc 50%, transparent 50%); background-size: 8px 8px; }
+.bg-12 { background-image: linear-gradient(90deg, #ef5350 50%, transparent 50%); background-size: 8px 8px; }
+.bg-13 { background-image: linear-gradient(45deg, #ffee58 25%, transparent 25%, transparent 50%, #ffee58 50%, #ffee58 75%, transparent 75%, transparent); background-size: 8px 8px; }
+.bg-14 { background-image: linear-gradient(#e0e0e0 1px, transparent 1px), linear-gradient(90deg, #e0e0e0 1px, transparent 1px); background-size: 8px 8px; }
+.bg-15 { background-color: #81c784; background-image: linear-gradient(90deg, #2e7d32 50%, transparent 50%), linear-gradient(#2e7d32 50%, transparent 50%); background-size: 8px 8px; }
+.bg-16 { background-image: radial-gradient(#ab47bc 20%, transparent 20%); background-size: 8px 8px; }
+.bg-17 { background-color: #ffe0b2; background-image: linear-gradient(45deg, #fb8c00 25%, transparent 25%), linear-gradient(-45deg, #fb8c00 25%, transparent 25%); background-size: 8px 8px; }
+.bg-18 { background-color: #b0bec5; background-image: linear-gradient(45deg, #cfd8dc 25%, transparent 25%), linear-gradient(-45deg, #cfd8dc 25%, transparent 25%); background-size: 8px 8px; }
+.bg-19 { background-image: linear-gradient(90deg, #f8bbd0 50%, transparent 50%); background-size: 8px 8px; }
+.bg-20 { background-color: #d7ccc8; background-image: linear-gradient(90deg, #8d6e63 50%, transparent 50%), linear-gradient(#8d6e63 50%, transparent 50%); background-size: 8px 8px; }
+
+/* 畫布區 */
+#canvas{
+    position: relative;
+    width: min(80vw, 900px);
+    aspect-ratio: 3/2;
+    margin: 15px auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 10px;
+    background: #fff;
+    padding: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    z-index: 1;
+}
+
+.frame{ position:relative; background: #fff; z-index: 5; }
+
+/* 邊框層級為 10 */
+.border{ position:absolute; z-index: 10; pointer-events: none; }
+.top{top:0;height:15%;width:100%;}
+.bottom{bottom:0;height:15%;width:100%;}
+.left{left:0;width:15%;height:100%;}
+.right{right:0;width:15%;height:100%;}
+
+.center{
+    position:absolute; width:70%; height:70%;
+    top:50%; left:50%; transform:translate(-50%,-50%);
+    overflow:hidden; background: #000; z-index: 5;
+}
+
+video, .photo { width:100%; height:100%; object-fit:cover; }
+.count {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-size:80px; color:#fff; text-shadow:0 0 20px rgba(0,0,0,0.8); z-index: 20;
+}
+
+/* 貼圖層級設為 100，確保在所有東西之上 */
+.sticker { 
+    position:absolute; 
+    cursor:move; 
+    z-index: 100; 
+    user-select: none; 
+    touch-action: none; 
+}
+
+.controls { margin: 15px 0 40px 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+button{
+    padding: 10px 20px; border:none; border-radius:25px;
+    font-size:15px; font-weight: bold; color:#fff;
+    background:linear-gradient(45deg,#ff7eb3,#ff758c); cursor:pointer;
+    box-shadow: 0 4px 10px rgba(255,117,140,0.3);
+}
+.linkBtn{ background:linear-gradient(45deg,#36d1dc,#5b86e5); }
+.infoBtn{ background:linear-gradient(45deg,#ffa726,#fb8c00); }
+</style>
+</head>
+
+<body>
+
+<div class="panel" id="panel-left"><div class="col-title">💝 貼圖</div></div>
+<div class="panel" id="panel-right"><div class="col-title">😊 Emoji</div></div>
+
+<h2 style="color: #d81b60; margin: 15px 0;">🌸 豐洲國小 母親節 AI 拍貼機 🌸</h2>
+
+<div id="canvas"></div>
+
+<div class="controls">
+    <button onclick="start()">📸 開始拍照</button>
+    <button id="toggleBtn" onclick="toggleCut()">🧍 AI 去背</button>
+    <button onclick="shuffleBorders()">🔄 隨機換邊框</button>
+    <button class="infoBtn" onclick="window.open('readme.png', '_blank')">💡 操作說明</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
+
+<script>
+let frames = [];
+let isCutMode = false;
+let net = null;
+let currentStream = null;
+const pinkColors = ['#fce4ec', '#f8bbd0', '#f48fb1', '#f06292', '#ec407a', '#d81b60', '#ffcdd2', '#ef9a9a'];
+const emojiList = "⚽🍉🌺🐶🏀🍎🌻🦊🏐🍌🌷🐴🎾🍓🌵🐹🌈⭐🍀";
+
+async function init() {
+    const canvasDiv = document.getElementById("canvas");
+    try {
+        currentStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" } 
+        });
+    } catch (e) {
+        alert("無法開啟相機，請檢查權限設定。");
+    }
+
+    for(let i=0; i<4; i++){
+        let f = document.createElement("div");
+        f.className = "frame";
+        let c = document.createElement("div");
+        c.className = "center";
+        let v = createVideoElement();
+        let count = document.createElement("div");
+        count.className = "count";
+        c.appendChild(v); c.appendChild(count);
+        f.appendChild(c); 
+        canvasDiv.appendChild(f);
+        frames.push({video:v, center:c, count:count, frame:f, style:null, original:null, cut:null});
+    }
+    shuffleBorders();
+    initPanels();
+    bodyPix.load().then(n => net = n);
+}
+
+function createVideoElement() {
+    let v = document.createElement("video");
+    v.autoplay = true; v.playsInline = true;
+    if(currentStream) v.srcObject = currentStream;
+    return v;
+}
+
+async function start(){
+    for(let f of frames) {
+        f.center.innerHTML = ""; 
+        let v = createVideoElement();
+        let countDiv = document.createElement("div");
+        countDiv.className = "count";
+        f.video = v; f.count = countDiv;
+        f.center.appendChild(v); f.center.appendChild(countDiv);
+    }
+    for(let f of frames){
+        await new Promise(res => {
+            let n = 3;
+            let t = setInterval(() => {
+                if(n > 0) f.count.innerText = n--;
+                else { clearInterval(t); f.count.innerText = ""; capture(f); res(); }
+            }, 800);
+        });
+    }
+}
+
+async function capture(f){
+    let c = document.createElement("canvas");
+    c.width = 640; c.height = 480;
+    let ctx = c.getContext("2d");
+    ctx.filter = "brightness(1.1) contrast(1.05) saturate(1.1) blur(0.3px)";
+    ctx.drawImage(f.video, 0, 0, 640, 480);
+    ctx.filter = "none";
+    f.original = c.toDataURL("image/jpeg", 0.9);
+    if(net){
+        let seg = await net.segmentPerson(c);
+        let d = ctx.getImageData(0,0,640,480);
+        for(let i=0; i<seg.data.length; i++) if(seg.data[i]===0) d.data[i*4+3]=0;
+        ctx.putImageData(d,0,0); 
+        f.cut = c.toDataURL("image/png");
+    }
+    showImage(f, isCutMode ? f.cut : f.original);
+}
+
+function showImage(f, src){
+    if(!src) return;
+    f.center.innerHTML = "";
+    let img = new Image(); img.src = src; img.className = "photo";
+    f.center.appendChild(img);
+}
+
+function toggleCut(){
+    isCutMode = !isCutMode;
+    frames.forEach(f => { if(f.original) showImage(f, isCutMode ? f.cut : f.original); });
+    document.getElementById("toggleBtn").innerText = isCutMode ? "🖼️ 恢復原圖" : "🧍 AI 去背";
+}
+
+/* 隨機換邊框與生成可移動貼圖 */
+function shuffleBorders() {
+    const canvasDiv = document.getElementById("canvas");
+    // 清除舊的隨機貼圖 (不清除手動點選的)
+    canvasDiv.querySelectorAll(".sticker-auto").forEach(s => s.remove());
+
+    frames.forEach((f, idx) => {
+        f.frame.querySelectorAll(".border").forEach(b => b.remove());
+        let frameStyle = Math.random() > 0.4 
+            ? { type: 'color', val: pinkColors[Math.floor(Math.random()*pinkColors.length)] }
+            : { type: 'class', val: 'bg-' + (Math.floor(Math.random()*20)+1) };
+        f.style = frameStyle;
+
+        ["top","bottom","left","right"].forEach(p => {
+            let b = document.createElement("div");
+            b.className = "border " + p;
+            if(frameStyle.type === 'color') b.style.backgroundColor = frameStyle.val;
+            else b.classList.add(frameStyle.val);
+            f.frame.appendChild(b);
+        });
+
+        // 為每個相格生成貼圖，但附著在畫布上
+        autoAddStickersToCanvas(idx);
+    });
+}
+
+function autoAddStickersToCanvas(frameIdx) {
+    const canvasDiv = document.getElementById("canvas");
+    const rect = canvasDiv.getBoundingClientRect();
+    const fw = rect.width / 2;
+    const fh = rect.height / 2;
+    const ox = (frameIdx % 2) * fw;
+    const oy = Math.floor(frameIdx / 2) * fh;
+
+    // 每個相格隨機放 2-3 個貼圖
+    for(let i=0; i<2; i++){
+        let n = Math.floor(Math.random() * 36) + 1;
+        let s = createStickerElement(`IMAGE/mom(${n}).png`, 'img', 1.2);
+        s.classList.add("sticker-auto");
+        
+        // 隨機分布在該相格範圍內
+        s.style.left = (ox + Math.random() * (fw-80)) + "px";
+        s.style.top = (oy + Math.random() * (fh-80)) + "px";
+        canvasDiv.appendChild(s);
+    }
+}
+
+function initPanels() {
+    const left = document.getElementById("panel-left");
+    const right = document.getElementById("panel-right");
+    for(let i=1; i<=36; i++){
+        let img = document.createElement("img");
+        img.src = `IMAGE/mom(${i}).png`;
+        img.onerror = () => img.remove();
+        img.onclick = () => addManualSticker(img.src, 'img');
+        left.appendChild(img);
+    }
+    Array.from(emojiList).forEach(emoji => {
+        let span = document.createElement("div");
+        span.className = "emoji-item";
+        span.innerText = emoji;
+        span.onclick = () => addManualSticker(emoji, 'emoji');
+        right.appendChild(span);
+    });
+}
+
+/* 點選後出現在正中央 */
+function addManualSticker(content, type) {
+    const canvasDiv = document.getElementById("canvas");
+    let s = createStickerElement(content, type, 1.8);
+    
+    // 設定在正中央 (考慮到 translate(-50%, -50%) 會影響拖曳，我們直接算座標)
+    canvasDiv.appendChild(s);
+    const rect = canvasDiv.getBoundingClientRect();
+    s.style.left = (rect.width / 2 - 50) + "px";
+    s.style.top = (rect.height / 2 - 50) + "px";
+}
+
+function createStickerElement(content, type, scale) {
+    let el = (type === 'img') ? document.createElement("img") : document.createElement("div");
+    if(type === 'img') { el.src = content; el.style.width = (60 * scale) + "px"; }
+    else { el.innerText = content; el.style.fontSize = (40 * scale) + "px"; }
+    el.classList.add("sticker");
+    makeInteractable(el, type);
+    return el;
+}
+
+function makeInteractable(el, type) {
+    let sx, sy, ox, oy;
+    const startMove = e => {
+        const touch = e.touches ? e.touches[0] : e;
+        sx = touch.clientX; sy = touch.clientY;
+        ox = el.offsetLeft; oy = el.offsetTop;
+        document.addEventListener(e.touches ? "touchmove" : "mousemove", moveListener, {passive: false});
+        document.addEventListener(e.touches ? "touchend" : "mouseup", upListener);
+    };
+    const moveListener = e => {
+        if(e.cancelable) e.preventDefault();
+        const touch = e.touches ? e.touches[0] : e;
+        el.style.left = (ox + touch.clientX - sx) + "px";
+        el.style.top = (oy + touch.clientY - sy) + "px";
+    };
+    const upListener = () => {
+        document.removeEventListener("mousemove", moveListener);
+        document.removeEventListener("touchmove", moveListener);
+    };
+    el.addEventListener("mousedown", startMove);
+    el.addEventListener("touchstart", startMove, {passive: false});
+
+    el.onwheel = e => {
+        e.preventDefault();
+        let r = e.deltaY > 0 ? 0.9 : 1.1;
+        if(type === 'img') el.style.width = (parseFloat(el.style.width)*r)+"px";
+        else el.style.fontSize = (parseFloat(el.style.fontSize)*r)+"px";
+    };
+}
+
+function download(){
+    let out = document.createElement("canvas");
+    out.width = 1800; out.height = 1200;
+    let ctx = out.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0,0,1800,1200);
+
+    // 1. 畫相片與邊框
+    frames.forEach((f, i) => {
+        let x = (i % 2) * 900;
+        let y = Math.floor(i / 2) * 600;
+
+        if(f.style.type === 'color') ctx.fillStyle = f.style.val;
+        else ctx.fillStyle = "#f8bbd0";
+        
+        ctx.fillRect(x, y, 900, 90); ctx.fillRect(x, y + 510, 900, 90);
+        ctx.fillRect(x, y, 135, 600); ctx.fillRect(x + 765, y, 135, 600);
+
+        let img = f.center.querySelector("img");
+        if(img) ctx.drawImage(img, x+135, y+90, 630, 420);
+    });
+
+    // 2. 畫全域貼圖 (從 #canvas 抓取)
+    const canvasDiv = document.getElementById("canvas");
+    const rect = canvasDiv.getBoundingClientRect();
+    const ratio = 1800 / rect.width;
+
+    canvasDiv.querySelectorAll(".sticker").forEach(s => {
+        let sx = parseFloat(s.style.left) * ratio;
+        let sy = parseFloat(s.style.top) * ratio;
+        let sw = s.offsetWidth * ratio;
+        let sh = s.offsetHeight * ratio;
+
+        if(s.tagName === "IMG") {
+            ctx.drawImage(s, sx, sy, sw, sh);
+        } else {
+            ctx.fillStyle = "#000";
+            ctx.font = (parseFloat(window.getComputedStyle(s).fontSize) * ratio) + "px Arial";
+            ctx.fillText(s.innerText, sx, sy + sh*0.8);
+        }
+    });
+
+    let a = document.createElement("a");
+    a.href = out.toDataURL("image/png");
+    a.download = "豐洲國小_母親節拍貼.png";
+    a.click();
+}
+
+window.onload = init;
+</script>
+
+</body>
+</html>
