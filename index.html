@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>豐洲國小 母親節 AI 拍貼機 - 專業材質美顏版 💖</title>
+<title>豐洲國小 母親節 AI 拍貼機 - 貼圖優化版 💖</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
 <style>
@@ -15,7 +15,7 @@ body{
     touch-action: manipulation;
 }
 
-/* 左右分置貼圖庫 - 增加手機自適應 */
+/* 左右貼圖庫 */
 .panel {
     position: fixed;
     top: 10px;
@@ -26,7 +26,7 @@ body{
     box-shadow: 0 8px 25px rgba(0,0,0,0.1);
     padding: 10px;
     overflow-y: auto;
-    z-index: 100;
+    z-index: 1000; /* 高於畫布 */
 }
 #panel-left { left: 5px; }
 #panel-right { right: 5px; }
@@ -56,7 +56,7 @@ body{
 .emoji-item { font-size: 40px; text-align: center; line-height: 70px; }
 .panel img:hover, .emoji-item:hover { transform: scale(1.15); }
 
-/* 材質庫 CSS */
+/* 材質庫 */
 .bg-1 { background-image: linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%); background-size: 8px 8px; }
 .bg-2 { background-image: linear-gradient(45deg, #b4d2ff 25%, transparent 25%, transparent 50%, #b4d2ff 50%, #b4d2ff 75%, transparent 75%, transparent); background-size: 8px 8px; }
 .bg-3 { background-image: radial-gradient(#ff5050 20%, transparent 20%); background-size: 8px 8px; }
@@ -80,20 +80,24 @@ body{
 
 /* 畫布區 */
 #canvas{
+    position: relative;
     width: min(80vw, 900px);
     aspect-ratio: 3/2;
     margin: 15px auto;
     display: grid;
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
     gap: 10px;
     background: #fff;
     padding: 10px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    z-index: 1;
 }
 
-.frame{ position:relative; background: #fff; overflow: hidden; }
+.frame{ position:relative; background: #fff; z-index: 5; }
 
-.border{ position:absolute; z-index: 1;}
+/* 邊框層級為 10 */
+.border{ position:absolute; z-index: 10; pointer-events: none; }
 .top{top:0;height:15%;width:100%;}
 .bottom{bottom:0;height:15%;width:100%;}
 .left{left:0;width:15%;height:100%;}
@@ -102,15 +106,23 @@ body{
 .center{
     position:absolute; width:70%; height:70%;
     top:50%; left:50%; transform:translate(-50%,-50%);
-    overflow:hidden; background: #000; z-index: 2;
+    overflow:hidden; background: #000; z-index: 5;
 }
 
 video, .photo { width:100%; height:100%; object-fit:cover; }
 .count {
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-    font-size:80px; color:#fff; text-shadow:0 0 20px rgba(0,0,0,0.8); z-index: 10;
+    font-size:80px; color:#fff; text-shadow:0 0 20px rgba(0,0,0,0.8); z-index: 20;
 }
-.sticker { position:absolute; cursor:move; z-index:50; user-select: none; touch-action: none; }
+
+/* 貼圖層級設為 100，確保在所有東西之上 */
+.sticker { 
+    position:absolute; 
+    cursor:move; 
+    z-index: 100; 
+    user-select: none; 
+    touch-action: none; 
+}
 
 .controls { margin: 15px 0 40px 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 button{
@@ -166,19 +178,14 @@ async function init() {
     for(let i=0; i<4; i++){
         let f = document.createElement("div");
         f.className = "frame";
-        
         let c = document.createElement("div");
         c.className = "center";
-        
         let v = createVideoElement();
         let count = document.createElement("div");
         count.className = "count";
-        
-        c.appendChild(v); 
-        c.appendChild(count);
+        c.appendChild(v); c.appendChild(count);
         f.appendChild(c); 
         canvasDiv.appendChild(f);
-        
         frames.push({video:v, center:c, count:count, frame:f, style:null, original:null, cut:null});
     }
     shuffleBorders();
@@ -188,60 +195,39 @@ async function init() {
 
 function createVideoElement() {
     let v = document.createElement("video");
-    v.autoplay = true;
-    v.playsInline = true;
+    v.autoplay = true; v.playsInline = true;
     if(currentStream) v.srcObject = currentStream;
     return v;
 }
 
-/* 拍照前清空舊數據並重置視訊 */
 async function start(){
-    // 1. 重置所有狀態
     for(let f of frames) {
-        f.center.innerHTML = ""; // 清空
-        f.original = null;
-        f.cut = null;
-        
+        f.center.innerHTML = ""; 
         let v = createVideoElement();
         let countDiv = document.createElement("div");
         countDiv.className = "count";
-        f.video = v;
-        f.count = countDiv;
-        
-        f.center.appendChild(v);
-        f.center.appendChild(countDiv);
+        f.video = v; f.count = countDiv;
+        f.center.appendChild(v); f.center.appendChild(countDiv);
     }
-
-    // 2. 開始倒數連拍
     for(let f of frames){
         await new Promise(res => {
             let n = 3;
             let t = setInterval(() => {
                 if(n > 0) f.count.innerText = n--;
-                else { 
-                    clearInterval(t); 
-                    f.count.innerText = ""; 
-                    capture(f); 
-                    res(); 
-                }
+                else { clearInterval(t); f.count.innerText = ""; capture(f); res(); }
             }, 800);
         });
     }
 }
 
-/* AI 美顏濾鏡 + 擷取 */
 async function capture(f){
     let c = document.createElement("canvas");
     c.width = 640; c.height = 480;
     let ctx = c.getContext("2d");
-    
-    // 套用美顏濾鏡 (亮度+、對比+、飽和+、微模糊柔膚)
     ctx.filter = "brightness(1.1) contrast(1.05) saturate(1.1) blur(0.3px)";
     ctx.drawImage(f.video, 0, 0, 640, 480);
-    ctx.filter = "none"; // 恢復原狀
-
+    ctx.filter = "none";
     f.original = c.toDataURL("image/jpeg", 0.9);
-    
     if(net){
         let seg = await net.segmentPerson(c);
         let d = ctx.getImageData(0,0,640,480);
@@ -255,9 +241,7 @@ async function capture(f){
 function showImage(f, src){
     if(!src) return;
     f.center.innerHTML = "";
-    let img = new Image(); 
-    img.src = src; 
-    img.className = "photo";
+    let img = new Image(); img.src = src; img.className = "photo";
     f.center.appendChild(img);
 }
 
@@ -267,9 +251,13 @@ function toggleCut(){
     document.getElementById("toggleBtn").innerText = isCutMode ? "🖼️ 恢復原圖" : "🧍 AI 去背";
 }
 
-/* 隨機邊框與貼圖邏輯 */
+/* 隨機換邊框與生成可移動貼圖 */
 function shuffleBorders() {
-    frames.forEach(f => {
+    const canvasDiv = document.getElementById("canvas");
+    // 清除舊的隨機貼圖 (不清除手動點選的)
+    canvasDiv.querySelectorAll(".sticker-auto").forEach(s => s.remove());
+
+    frames.forEach((f, idx) => {
         f.frame.querySelectorAll(".border").forEach(b => b.remove());
         let frameStyle = Math.random() > 0.4 
             ? { type: 'color', val: pinkColors[Math.floor(Math.random()*pinkColors.length)] }
@@ -283,21 +271,31 @@ function shuffleBorders() {
             else b.classList.add(frameStyle.val);
             f.frame.appendChild(b);
         });
-        autoAddStickersToCorners(f.frame);
+
+        // 為每個相格生成貼圖，但附著在畫布上
+        autoAddStickersToCanvas(idx);
     });
 }
 
-function autoAddStickersToCorners(frameElement) {
-    frameElement.querySelectorAll(".sticker-auto").forEach(s => s.remove());
-    const cornerCoords = [{top:"2%",left:"2%"}, {top:"2%",right:"2%"}, {bottom:"2%",left:"2%"}, {bottom:"2%",right:"2%"}];
-    let chosen = cornerCoords.sort(() => 0.5 - Math.random()).slice(0, 3);
-    chosen.forEach((pos, idx) => {
+function autoAddStickersToCanvas(frameIdx) {
+    const canvasDiv = document.getElementById("canvas");
+    const rect = canvasDiv.getBoundingClientRect();
+    const fw = rect.width / 2;
+    const fh = rect.height / 2;
+    const ox = (frameIdx % 2) * fw;
+    const oy = Math.floor(frameIdx / 2) * fh;
+
+    // 每個相格隨機放 2-3 個貼圖
+    for(let i=0; i<2; i++){
         let n = Math.floor(Math.random() * 36) + 1;
         let s = createStickerElement(`IMAGE/mom(${n}).png`, 'img', 1.2);
         s.classList.add("sticker-auto");
-        Object.assign(s.style, pos);
-        frameElement.appendChild(s);
-    });
+        
+        // 隨機分布在該相格範圍內
+        s.style.left = (ox + Math.random() * (fw-80)) + "px";
+        s.style.top = (oy + Math.random() * (fh-80)) + "px";
+        canvasDiv.appendChild(s);
+    }
 }
 
 function initPanels() {
@@ -319,10 +317,16 @@ function initPanels() {
     });
 }
 
+/* 點選後出現在正中央 */
 function addManualSticker(content, type) {
-    let s = createStickerElement(content, type, 1.5);
-    s.style.left = "30%"; s.style.top = "30%";
-    frames[0].frame.appendChild(s);
+    const canvasDiv = document.getElementById("canvas");
+    let s = createStickerElement(content, type, 1.8);
+    
+    // 設定在正中央 (考慮到 translate(-50%, -50%) 會影響拖曳，我們直接算座標)
+    canvasDiv.appendChild(s);
+    const rect = canvasDiv.getBoundingClientRect();
+    s.style.left = (rect.width / 2 - 50) + "px";
+    s.style.top = (rect.height / 2 - 50) + "px";
 }
 
 function createStickerElement(content, type, scale) {
@@ -334,7 +338,6 @@ function createStickerElement(content, type, scale) {
     return el;
 }
 
-/* 支援觸控與滑鼠的拖曳與縮放 */
 function makeInteractable(el, type) {
     let sx, sy, ox, oy;
     const startMove = e => {
@@ -365,45 +368,45 @@ function makeInteractable(el, type) {
     };
 }
 
-/* 下載與重繪 */
 function download(){
     let out = document.createElement("canvas");
     out.width = 1800; out.height = 1200;
     let ctx = out.getContext("2d");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0,0,1800,1200);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0,0,1800,1200);
 
+    // 1. 畫相片與邊框
     frames.forEach((f, i) => {
         let x = (i % 2) * 900;
         let y = Math.floor(i / 2) * 600;
 
-        // 1. 邊框
-        if(f.style.type === 'color') {
-            ctx.fillStyle = f.style.val;
-        } else {
-            ctx.fillStyle = "#f8bbd0";
-        }
+        if(f.style.type === 'color') ctx.fillStyle = f.style.val;
+        else ctx.fillStyle = "#f8bbd0";
+        
         ctx.fillRect(x, y, 900, 90); ctx.fillRect(x, y + 510, 900, 90);
         ctx.fillRect(x, y, 135, 600); ctx.fillRect(x + 765, y, 135, 600);
 
-        // 2. 照片
         let img = f.center.querySelector("img");
         if(img) ctx.drawImage(img, x+135, y+90, 630, 420);
+    });
 
-        // 3. 貼圖
-        f.frame.querySelectorAll(".sticker").forEach(s => {
-            let r = s.getBoundingClientRect();
-            let fr = f.frame.getBoundingClientRect();
-            let sx = x + (r.left - fr.left) * (900/fr.width);
-            let sy = y + (r.top - fr.top) * (600/fr.height);
-            if(s.tagName === "IMG") {
-                ctx.drawImage(s, sx, sy, s.width * (900/fr.width), s.height * (600/fr.height));
-            } else {
-                ctx.fillStyle = "#000";
-                ctx.font = (parseFloat(window.getComputedStyle(s).fontSize) * 2) + "px Arial";
-                ctx.fillText(s.innerText, sx, sy + 50);
-            }
-        });
+    // 2. 畫全域貼圖 (從 #canvas 抓取)
+    const canvasDiv = document.getElementById("canvas");
+    const rect = canvasDiv.getBoundingClientRect();
+    const ratio = 1800 / rect.width;
+
+    canvasDiv.querySelectorAll(".sticker").forEach(s => {
+        let sx = parseFloat(s.style.left) * ratio;
+        let sy = parseFloat(s.style.top) * ratio;
+        let sw = s.offsetWidth * ratio;
+        let sh = s.offsetHeight * ratio;
+
+        if(s.tagName === "IMG") {
+            ctx.drawImage(s, sx, sy, sw, sh);
+        } else {
+            ctx.fillStyle = "#000";
+            ctx.font = (parseFloat(window.getComputedStyle(s).fontSize) * ratio) + "px Arial";
+            ctx.fillText(s.innerText, sx, sy + sh*0.8);
+        }
     });
 
     let a = document.createElement("a");
