@@ -2,8 +2,10 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>豐洲國小 母親節 AI 拍貼機 - 貼圖優化版 💖</title>
+<title>豐洲國小 母親節 AI 拍貼機 - 完美去背版 💖</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
 
 <style>
 body{
@@ -26,7 +28,7 @@ body{
     box-shadow: 0 8px 25px rgba(0,0,0,0.1);
     padding: 10px;
     overflow-y: auto;
-    z-index: 1000; /* 高於畫布 */
+    z-index: 1000;
 }
 #panel-left { left: 5px; }
 #panel-right { right: 5px; }
@@ -96,7 +98,6 @@ body{
 
 .frame{ position:relative; background: #fff; z-index: 5; }
 
-/* 邊框層級為 10 */
 .border{ position:absolute; z-index: 10; pointer-events: none; }
 .top{top:0;height:15%;width:100%;}
 .bottom{bottom:0;height:15%;width:100%;}
@@ -115,13 +116,14 @@ video, .photo { width:100%; height:100%; object-fit:cover; }
     font-size:80px; color:#fff; text-shadow:0 0 20px rgba(0,0,0,0.8); z-index: 20;
 }
 
-/* 貼圖層級設為 100，確保在所有東西之上 */
+/* 貼圖 */
 .sticker { 
     position:absolute; 
     cursor:move; 
     z-index: 100; 
     user-select: none; 
-    touch-action: none; 
+    touch-action: none;
+    transition: width 0.2s ease, font-size 0.2s ease;
 }
 
 .controls { margin: 15px 0 40px 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
@@ -147,27 +149,35 @@ button{
 
 <div class="controls">
     <button onclick="start()">📸 開始拍照</button>
-    <button id="toggleBtn" onclick="toggleCut()">🧍 AI 去背</button>
+    <button id="toggleBtn" onclick="toggleCut()">🧍 AI 去背(白底)</button>
     <button onclick="shuffleBorders()">🔄 隨機換邊框</button>
+    <button onclick="download1()">💾 下載圖檔</button>
     <button class="infoBtn" onclick="window.open('readme.png', '_blank')">💡 操作說明</button>
+    <button class="linkBtn" onclick="window.open('https://pjes.tc.edu.tw/')">🔗 上傳作品</button>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
 
 <script>
 let frames = [];
 let isCutMode = false;
-let net = null;
+let selfieSegmentation = null;
 let currentStream = null;
+let currentFrameToProcess = null; // 用於回調定位
 const pinkColors = ['#fce4ec', '#f8bbd0', '#f48fb1', '#f06292', '#ec407a', '#d81b60', '#ffcdd2', '#ef9a9a'];
 const emojiList = "⚽🍉🌺🐶🏀🍎🌻🦊🏐🍌🌷🐴🎾🍓🌵🐹🌈⭐🍀";
 
 async function init() {
     const canvasDiv = document.getElementById("canvas");
+
+    // 初始化 MediaPipe
+    selfieSegmentation = new SelfieSegmentation({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+    });
+    selfieSegmentation.setOptions({ modelSelection: 1 });
+    selfieSegmentation.onResults(onResultsHandler);
+
     try {
         currentStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" } 
+            video: { width: 640, height: 480, facingMode: "user" } 
         });
     } catch (e) {
         alert("無法開啟相機，請檢查權限設定。");
@@ -188,7 +198,6 @@ async function init() {
     }
     shuffleBorders();
     initPanels();
-    bodyPix.load().then(n => net = n);
 }
 
 function createVideoElement() {
@@ -215,24 +224,50 @@ async function start(){
                 else { clearInterval(t); f.count.innerText = ""; capture(f); res(); }
             }, 800);
         });
+        await new Promise(r => setTimeout(r, 500)); // 等待 AI 處理緩衝
     }
 }
 
 async function capture(f){
-    let c = document.createElement("canvas");
-    c.width = 640; c.height = 480;
-    let ctx = c.getContext("2d");
-    ctx.filter = "brightness(1.1) contrast(1.05) saturate(1.1) blur(0.3px)";
+    let tempC = document.createElement("canvas");
+    tempC.width = 640; tempC.height = 480;
+    let ctx = tempC.getContext("2d");
+    
+    // 美肌
+    ctx.filter = "brightness(1.1) contrast(1.05) saturate(1.1) blur(0.2px)";
     ctx.drawImage(f.video, 0, 0, 640, 480);
     ctx.filter = "none";
-    f.original = c.toDataURL("image/jpeg", 0.9);
-    if(net){
-        let seg = await net.segmentPerson(c);
-        let d = ctx.getImageData(0,0,640,480);
-        for(let i=0; i<seg.data.length; i++) if(seg.data[i]===0) d.data[i*4+3]=0;
-        ctx.putImageData(d,0,0); 
-        f.cut = c.toDataURL("image/png");
-    }
+    
+    f.original = tempC.toDataURL("image/jpeg", 0.9);
+
+    // 傳送至 MediaPipe 處理
+    currentFrameToProcess = f;
+    await selfieSegmentation.send({image: tempC});
+}
+
+// 修正後的去背合成邏輯
+function onResultsHandler(results) {
+    if (!currentFrameToProcess) return;
+    const f = currentFrameToProcess;
+    
+    const cutCanvas = document.createElement("canvas");
+    cutCanvas.width = 640; cutCanvas.height = 480;
+    const cutCtx = cutCanvas.getContext("2d");
+
+    // 1. 先把「人像」畫出來 (利用 Mask)
+    // 我們先將 Mask 畫到畫布上
+    cutCtx.drawImage(results.segmentationMask, 0, 0, 640, 480);
+    
+    // 2. 設定合成模式為 source-in：只保留新畫上的內容(人像)與舊內容(Mask)重疊的部分
+    cutCtx.globalCompositeOperation = 'source-in';
+    cutCtx.drawImage(results.image, 0, 0, 640, 480);
+
+    // 3. 設定合成模式為 destination-over：在「背後」補上內容
+    cutCtx.globalCompositeOperation = 'destination-over';
+    cutCtx.fillStyle = "#FFFFFF"; // 白色背景
+    cutCtx.fillRect(0, 0, 640, 480);
+    
+    f.cut = cutCanvas.toDataURL("image/png");
     showImage(f, isCutMode ? f.cut : f.original);
 }
 
@@ -246,22 +281,20 @@ function showImage(f, src){
 function toggleCut(){
     isCutMode = !isCutMode;
     frames.forEach(f => { if(f.original) showImage(f, isCutMode ? f.cut : f.original); });
-    document.getElementById("toggleBtn").innerText = isCutMode ? "🖼️ 恢復原圖" : "🧍 AI 去背";
+    document.getElementById("toggleBtn").innerText = isCutMode ? "🖼️ 恢復原圖" : "🧍 AI 去背(白底)";
 }
 
-/* 隨機換邊框與生成可移動貼圖 */
+/* --- 以下維持功能不變 --- */
+
 function shuffleBorders() {
     const canvasDiv = document.getElementById("canvas");
-    // 清除舊的隨機貼圖 (不清除手動點選的)
     canvasDiv.querySelectorAll(".sticker-auto").forEach(s => s.remove());
-
     frames.forEach((f, idx) => {
         f.frame.querySelectorAll(".border").forEach(b => b.remove());
         let frameStyle = Math.random() > 0.4 
             ? { type: 'color', val: pinkColors[Math.floor(Math.random()*pinkColors.length)] }
             : { type: 'class', val: 'bg-' + (Math.floor(Math.random()*20)+1) };
         f.style = frameStyle;
-
         ["top","bottom","left","right"].forEach(p => {
             let b = document.createElement("div");
             b.className = "border " + p;
@@ -269,8 +302,6 @@ function shuffleBorders() {
             else b.classList.add(frameStyle.val);
             f.frame.appendChild(b);
         });
-
-        // 為每個相格生成貼圖，但附著在畫布上
         autoAddStickersToCanvas(idx);
     });
 }
@@ -282,14 +313,10 @@ function autoAddStickersToCanvas(frameIdx) {
     const fh = rect.height / 2;
     const ox = (frameIdx % 2) * fw;
     const oy = Math.floor(frameIdx / 2) * fh;
-
-    // 每個相格隨機放 2-3 個貼圖
     for(let i=0; i<2; i++){
         let n = Math.floor(Math.random() * 36) + 1;
-        let s = createStickerElement(`IMAGE/mom(${n}).png`, 'img', 1.2);
+        let s = createStickerElement(`IMAGE/mom(${n}).png`, 'img', 1.0);
         s.classList.add("sticker-auto");
-        
-        // 隨機分布在該相格範圍內
         s.style.left = (ox + Math.random() * (fw-80)) + "px";
         s.style.top = (oy + Math.random() * (fh-80)) + "px";
         canvasDiv.appendChild(s);
@@ -315,54 +342,60 @@ function initPanels() {
     });
 }
 
-/* 點選後出現在正中央 */
 function addManualSticker(content, type) {
     const canvasDiv = document.getElementById("canvas");
-    let s = createStickerElement(content, type, 1.8);
-    
-    // 設定在正中央 (考慮到 translate(-50%, -50%) 會影響拖曳，我們直接算座標)
+    let s = createStickerElement(content, type, 1.0);
     canvasDiv.appendChild(s);
     const rect = canvasDiv.getBoundingClientRect();
-    s.style.left = (rect.width / 2 - 50) + "px";
-    s.style.top = (rect.height / 2 - 50) + "px";
+    s.style.left = (rect.width / 2 - 40) + "px";
+    s.style.top = (rect.height / 2 - 40) + "px";
 }
 
-function createStickerElement(content, type, scale) {
+function createStickerElement(content, type, initialScale) {
     let el = (type === 'img') ? document.createElement("img") : document.createElement("div");
-    if(type === 'img') { el.src = content; el.style.width = (60 * scale) + "px"; }
-    else { el.innerText = content; el.style.fontSize = (40 * scale) + "px"; }
+    el.dataset.type = type; el.dataset.scale = initialScale; 
+    if(type === 'img') { el.src = content; el.style.width = (80 * initialScale) + "px"; }
+    else { el.innerText = content; el.style.fontSize = (50 * initialScale) + "px"; }
     el.classList.add("sticker");
-    makeInteractable(el, type);
+    makeInteractable(el);
     return el;
 }
 
-function makeInteractable(el, type) {
-    let sx, sy, ox, oy;
+function makeInteractable(el) {
+    let sx, sy, ox, oy, lastTap = 0;
+    const updateSize = () => {
+        let scale = parseFloat(el.dataset.scale);
+        if(el.dataset.type === 'img') el.style.width = (80 * scale) + "px";
+        else el.style.fontSize = (50 * scale) + "px";
+    };
+    const cycleScale = () => {
+        let s = parseFloat(el.dataset.scale);
+        if (s === 1.0) s = 1.5; else if (s === 1.5) s = 2.0; else if (s === 2.0) s = 3.0; else if (s === 3.0) s = 0.5; else s = 1.0;
+        el.dataset.scale = s; updateSize();
+    };
     const startMove = e => {
+        const now = Date.now();
+        if (now - lastTap < 300) { cycleScale(); return; }
+        lastTap = now;
         const touch = e.touches ? e.touches[0] : e;
-        sx = touch.clientX; sy = touch.clientY;
-        ox = el.offsetLeft; oy = el.offsetTop;
+        sx = touch.clientX; sy = touch.clientY; ox = el.offsetLeft; oy = el.offsetTop;
         document.addEventListener(e.touches ? "touchmove" : "mousemove", moveListener, {passive: false});
         document.addEventListener(e.touches ? "touchend" : "mouseup", upListener);
     };
     const moveListener = e => {
         if(e.cancelable) e.preventDefault();
         const touch = e.touches ? e.touches[0] : e;
-        el.style.left = (ox + touch.clientX - sx) + "px";
-        el.style.top = (oy + touch.clientY - sy) + "px";
+        el.style.left = (ox + touch.clientX - sx) + "px"; el.style.top = (oy + touch.clientY - sy) + "px";
     };
     const upListener = () => {
-        document.removeEventListener("mousemove", moveListener);
-        document.removeEventListener("touchmove", moveListener);
+        document.removeEventListener("mousemove", moveListener); document.removeEventListener("touchmove", moveListener);
     };
-    el.addEventListener("mousedown", startMove);
-    el.addEventListener("touchstart", startMove, {passive: false});
-
+    el.addEventListener("mousedown", startMove); el.addEventListener("touchstart", startMove, {passive: false});
     el.onwheel = e => {
         e.preventDefault();
-        let r = e.deltaY > 0 ? 0.9 : 1.1;
-        if(type === 'img') el.style.width = (parseFloat(el.style.width)*r)+"px";
-        else el.style.fontSize = (parseFloat(el.style.fontSize)*r)+"px";
+        let s = parseFloat(el.dataset.scale);
+        s = e.deltaY > 0 ? s * 0.9 : s * 1.1;
+        el.dataset.scale = s; updateSize();
     };
 }
 
@@ -372,35 +405,23 @@ function download(){
     let ctx = out.getContext("2d");
     ctx.fillStyle = "#fff"; ctx.fillRect(0,0,1800,1200);
 
-    // 1. 畫相片與邊框
     frames.forEach((f, i) => {
-        let x = (i % 2) * 900;
-        let y = Math.floor(i / 2) * 600;
-
-        if(f.style.type === 'color') ctx.fillStyle = f.style.val;
-        else ctx.fillStyle = "#f8bbd0";
-        
+        let x = (i % 2) * 900; let y = Math.floor(i / 2) * 600;
+        if(f.style.type === 'color') ctx.fillStyle = f.style.val; else ctx.fillStyle = "#f8bbd0";
         ctx.fillRect(x, y, 900, 90); ctx.fillRect(x, y + 510, 900, 90);
         ctx.fillRect(x, y, 135, 600); ctx.fillRect(x + 765, y, 135, 600);
-
         let img = f.center.querySelector("img");
         if(img) ctx.drawImage(img, x+135, y+90, 630, 420);
     });
 
-    // 2. 畫全域貼圖 (從 #canvas 抓取)
     const canvasDiv = document.getElementById("canvas");
     const rect = canvasDiv.getBoundingClientRect();
     const ratio = 1800 / rect.width;
-
     canvasDiv.querySelectorAll(".sticker").forEach(s => {
-        let sx = parseFloat(s.style.left) * ratio;
-        let sy = parseFloat(s.style.top) * ratio;
-        let sw = s.offsetWidth * ratio;
-        let sh = s.offsetHeight * ratio;
-
-        if(s.tagName === "IMG") {
-            ctx.drawImage(s, sx, sy, sw, sh);
-        } else {
+        let sx = parseFloat(s.style.left) * ratio; let sy = parseFloat(s.style.top) * ratio;
+        let sw = s.offsetWidth * ratio; let sh = s.offsetHeight * ratio;
+        if(s.tagName === "IMG") { ctx.drawImage(s, sx, sy, sw, sh); }
+        else {
             ctx.fillStyle = "#000";
             ctx.font = (parseFloat(window.getComputedStyle(s).fontSize) * ratio) + "px Arial";
             ctx.fillText(s.innerText, sx, sy + sh*0.8);
